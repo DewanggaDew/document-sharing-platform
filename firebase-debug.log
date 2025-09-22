@@ -1,0 +1,78 @@
+[debug] [2025-09-17T15:59:00.089Z] ----------------------------------------------------------------------
+[debug] [2025-09-17T15:59:00.101Z] Command:       C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2025-09-17T15:59:00.102Z] CLI Version:   14.16.0
+[debug] [2025-09-17T15:59:00.102Z] Platform:      win32
+[debug] [2025-09-17T15:59:00.102Z] Node Version:  v23.5.0
+[debug] [2025-09-17T15:59:00.103Z] Time:          Wed Sep 17 2025 23:59:00 GMT+0800 (Central Indonesia Time)
+[debug] [2025-09-17T15:59:00.103Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-09-17T15:59:00.111Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2025-09-17T15:59:00.444Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-09-17T15:59:00.445Z] > authorizing via signed-in user (dewangga.indera@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\lenovo\Desktop\document-sharing-platform
+
+[debug] [2025-09-17T15:59:01.218Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-09-17T15:59:01.219Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
+[debug] [2025-09-17T15:59:58.207Z] Using project from CLI flag: omni-dev-sea-20250825
+[debug] [2025-09-17T15:59:58.208Z] Checked if tokens are valid: false, expires at: 1758121696772
+[debug] [2025-09-17T15:59:58.208Z] Checked if tokens are valid: false, expires at: 1758121696772
+[debug] [2025-09-17T15:59:58.209Z] > refreshing access token with scopes: []
+[debug] [2025-09-17T15:59:58.210Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-09-17T15:59:58.210Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-09-17T15:59:58.449Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-09-17T15:59:58.449Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-09-17T15:59:58.468Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/omni-dev-sea-20250825 [none]
+[debug] [2025-09-17T15:59:58.963Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/omni-dev-sea-20250825 200
+[debug] [2025-09-17T15:59:58.964Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/omni-dev-sea-20250825 {"projectId":"omni-dev-sea-20250825","projectNumber":"904976588436","displayName":"OMNI Dev","name":"projects/omni-dev-sea-20250825","resources":{"hostingSite":"omni-dev-sea-20250825"},"state":"ACTIVE","etag":"1_7a94daa0-9757-4eac-918e-1427d98a23e7"}
+[info] i  Using project omni-dev-sea-20250825 (OMNI Dev) 
+[info] 
+=== Dataconnect Setup
+[debug] [2025-09-17T15:59:58.991Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T15:59:58.991Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T15:59:58.991Z] >>> [apiv2][query] GET https://cloudbilling.googleapis.com/v1/projects/omni-dev-sea-20250825/billingInfo [none]
+[debug] [2025-09-17T16:00:00.493Z] <<< [apiv2][status] GET https://cloudbilling.googleapis.com/v1/projects/omni-dev-sea-20250825/billingInfo 200
+[debug] [2025-09-17T16:00:00.493Z] <<< [apiv2][body] GET https://cloudbilling.googleapis.com/v1/projects/omni-dev-sea-20250825/billingInfo {"name":"projects/omni-dev-sea-20250825/billingInfo","projectId":"omni-dev-sea-20250825","billingAccountName":"","billingEnabled":false}
+[info] i  dataconnect: ensuring required API firebasedataconnect.googleapis.com is enabled... 
+[debug] [2025-09-17T16:00:00.495Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:00.495Z] Checked if tokens are valid: true, expires at: 1758128397449
+[info] i  dataconnect: ensuring required API sqladmin.googleapis.com is enabled... 
+[debug] [2025-09-17T16:00:00.496Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:00.496Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:00.496Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com [none]
+[debug] [2025-09-17T16:00:00.496Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com x-goog-quota-user=projects/omni-dev-sea-20250825
+[debug] [2025-09-17T16:00:00.497Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com [none]
+[debug] [2025-09-17T16:00:00.497Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com x-goog-quota-user=projects/omni-dev-sea-20250825
+[debug] [2025-09-17T16:00:02.166Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com 200
+[debug] [2025-09-17T16:00:02.166Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com [omitted]
+[warn] !  dataconnect: missing required API firebasedataconnect.googleapis.com. Enabling now... 
+[debug] [2025-09-17T16:00:02.167Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:02.167Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:02.167Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com:enable [none]
+[debug] [2025-09-17T16:00:02.167Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com:enable x-goog-quota-user=projects/omni-dev-sea-20250825
+[debug] [2025-09-17T16:00:02.169Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com 200
+[debug] [2025-09-17T16:00:02.169Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com [omitted]
+[warn] !  dataconnect: missing required API sqladmin.googleapis.com. Enabling now... 
+[debug] [2025-09-17T16:00:02.169Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:02.169Z] Checked if tokens are valid: true, expires at: 1758128397449
+[debug] [2025-09-17T16:00:02.169Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com:enable [none]
+[debug] [2025-09-17T16:00:02.170Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com:enable x-goog-quota-user=projects/omni-dev-sea-20250825
+[debug] [2025-09-17T16:00:02.669Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com:enable 200
+[debug] [2025-09-17T16:00:02.670Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/sqladmin.googleapis.com:enable [omitted]
+[debug] [2025-09-17T16:00:02.797Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com:enable 200
+[debug] [2025-09-17T16:00:02.797Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/omni-dev-sea-20250825/services/firebasedataconnect.googleapis.com:enable [omitted]
