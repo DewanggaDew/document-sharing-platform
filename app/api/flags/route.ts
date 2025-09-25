@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAuth } from "@/lib/server/auth"
-import { getAdminDb } from "@/lib/firebase/admin"
 import { createFlagSchema } from "@/lib/validators/flags"
+import { getSupabaseServer } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,19 +19,18 @@ export async function POST(req: Request) {
     }
     const { paperId, reason } = parsed.data
 
-    const db = getAdminDb()
-    const flagsRef = db.collection("flags").doc()
-    const now = new Date()
-    await flagsRef.set({
-      paperId,
-      userId,
-      reason,
-      status: "open",
-      createdAt: now,
-      updatedAt: now,
-    })
+    const supabase = getSupabaseServer()
+    const { data, error } = await supabase
+      .from("flags")
+      .insert({ paper_id: paperId, user_id: userId, reason, status: "open" })
+      .select("id")
+      .single()
 
-    return NextResponse.json({ id: flagsRef.id })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ id: data?.id })
   } catch (err: any) {
     console.error("/api/flags POST error", err)
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })

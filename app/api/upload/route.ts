@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { getAdminDb, getAdminStorageBucket } from "@/lib/firebase/admin"
 import { requireAuth } from "@/lib/server/auth"
 import { uploadMetadataSchema } from "@/lib/validators/upload"
+import { getSupabaseServer } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,17 +24,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing metadata" }, { status: 400 })
     }
 
-    // Extract metadata as text (handles both string and File/Blob cases)
     let metadataRaw = ""
-    if (typeof metadataPart === "string") {
-      metadataRaw = metadataPart
-    } else if (typeof metadataPart?.text === "function") {
-      metadataRaw = await metadataPart.text()
-    } else {
-      return NextResponse.json({ error: "Invalid metadata format" }, { status: 400 })
-    }
+    if (typeof metadataPart === "string") metadataRaw = metadataPart
+    else if (typeof metadataPart?.text === "function") metadataRaw = await metadataPart.text()
+    else return NextResponse.json({ error: "Invalid metadata format" }, { status: 400 })
 
-    // Validate size and type (server-side)
     const allowedTypes = new Set([
       "application/pdf",
       "application/msword",
@@ -42,19 +36,17 @@ export async function POST(req: Request) {
       "application/vnd.ms-powerpoint",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ])
-
     const contentTypeCandidate = file.type || "application/octet-stream"
     if (contentTypeCandidate && !allowedTypes.has(contentTypeCandidate)) {
       return NextResponse.json({ error: "Unsupported file type" }, { status: 400 })
     }
 
     const bytes = Buffer.from(await file.arrayBuffer())
-    const maxBytes = 50 * 1024 * 1024 // 50MB
+    const maxBytes = 50 * 1024 * 1024
     if (bytes.length > maxBytes) {
       return NextResponse.json({ error: "File too large (max 50MB)" }, { status: 400 })
     }
 
-    // Parse and validate metadata JSON
     let metadataJson: any
     try {
       metadataJson = JSON.parse(metadataRaw)
@@ -67,69 +59,50 @@ export async function POST(req: Request) {
     }
     const meta = parsed.data
 
-    // Upload to Firebase Storage
-    const bucket = getAdminStorageBucket()
+    // Supabase upload
+    const supabase = getSupabaseServer()
     const now = Date.now()
     const ext = (file.name.split(".").pop() || "").toLowerCase()
-    const storagePath = `papers/${userId}/${now}-${Math.random().toString(36).slice(2)}.${ext}`
-    const contentType = contentTypeCandidate
+    const path = `${userId}/${now}-${Math.random().toString(36).slice(2)}.${ext}`
 
-    await bucket.file(storagePath).save(bytes, {
-      contentType,
-      resumable: false,
-      metadata: {
-        metadata: {
-          uploadedBy: userId,
-          originalName: file.name,
-        },
-      },
+    // Ensure bucket exists (papers) - best effort
+    await supabase.storage.createBucket("papers", { public: false }).catch(() => {})
+
+    const { error: uploadErr } = await supabase.storage.from("papers").upload(path, bytes, {
+      contentType: contentTypeCandidate,
+      upsert: false,
     })
+    if (uploadErr) {
+      return NextResponse.json({ error: `Storage upload failed: ${uploadErr.message}` }, { status: 500 })
+    }
 
-    // Firestore doc
-    const db = getAdminDb()
-    const papersRef = db.collection("papers")
-    const docRef = papersRef.doc() // auto-id
-    const paperDoc = {
+    // Insert DB row
+    const insert = {
       title: meta.title,
       category: meta.category,
       competition: meta.competition,
       year: typeof meta.year === "string" ? parseInt(meta.year, 10) : meta.year,
       university: meta.university,
       team: meta.team ?? null,
-      description: meta.description ?? "",
-      topics: meta.topics ?? [],
-      companies: meta.companies ?? [],
-      authorUserId: userId,
-      storagePath,
-      fileType: contentType,
-      fileSize: bytes.length,
+      description: meta.description ?? null,
+      topics: (meta.topics ?? []) as string[],
+      companies: (meta.companies ?? []) as string[],
+      author_user_id: userId,
+      storage_path: path,
+      file_type: contentTypeCandidate,
+      file_size: bytes.length,
       views: 0,
       downloads: 0,
       likes: 0,
       verified: false,
-      status: "active" as const,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      status: "active",
+    }
+    const { data, error: dbErr } = await supabase.from("papers").insert(insert).select("id").single()
+    if (dbErr) {
+      return NextResponse.json({ error: `DB insert failed: ${dbErr.message}` }, { status: 500 })
     }
 
-    await docRef.set(paperDoc)
-
-    // Increment uploadsCount on user profile
-    const userRef = db.collection("users").doc(userId)
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(userRef)
-      const uploadsCount = (snap.exists ? (snap.data()?.uploadsCount as number) || 0 : 0) + 1
-      tx.set(
-        userRef,
-        {
-          uploadsCount,
-          updatedAt: new Date(),
-        },
-        { merge: true },
-      )
-    })
-
-    return NextResponse.json({ paperId: docRef.id, storagePath })
+    return NextResponse.json({ paperId: data.id, storagePath: path })
   } catch (err: any) {
     console.error("/api/upload error", err)
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })

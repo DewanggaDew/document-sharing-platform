@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getAdminDb } from "@/lib/firebase/admin"
+import { getSupabaseServer } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,50 +15,53 @@ export async function GET(req: Request) {
     const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100)
     const cursorB64 = searchParams.get("cursor")
 
-    const db = getAdminDb()
+    const supabase = getSupabaseServer()
 
-    // Base query
-    let query: FirebaseFirestore.Query = db
-      .collection("papers")
-      .where("status", "==", "active")
-      .orderBy("createdAt", "desc")
+    // Build base query
+    let query = supabase
+      .from("papers")
+      .select("*")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
 
-    // Apply cursor if present (createdAt based)
+    // Server-side filters where simple
+    if (category) query = query.eq("category", category)
+    if (year) query = query.eq("year", Number(year))
+    if (competition) query = query.ilike("competition", `%${competition}%`)
+    if (university) query = query.ilike("university", `%${university}%`)
+
+    // Cursor (created_at based)
     if (cursorB64) {
       try {
-        const { createdAt } = JSON.parse(Buffer.from(cursorB64, "base64").toString("utf8")) as {
-          createdAt: string
-          id?: string
+        const { created_at } = JSON.parse(Buffer.from(cursorB64, "base64").toString("utf8")) as {
+          created_at: string
         }
-        if (createdAt) {
-          query = query.startAfter(new Date(createdAt))
+        if (created_at) {
+          query = query.lt("created_at", created_at)
         }
       } catch {
         // ignore malformed cursor
       }
     }
 
-    // Fetch a page window; we purposely fetch slightly over requested limit
-    const fetchLimit = Math.min(limit + 20, 200)
-    const snap = await query.limit(fetchLimit).get()
-    let docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
+    const { data: rows, error } = await query.limit(limit + 1)
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    let docs = (rows || []) as any[]
 
-    // In-memory filters for MVP
-    if (category) docs = docs.filter((d) => d.category === category)
-    if (year) docs = docs.filter((d) => String(d.year) === String(year))
-    if (competition) docs = docs.filter((d) => d.competition?.toLowerCase().includes(competition.toLowerCase()))
-    if (university) docs = docs.filter((d) => d.university?.toLowerCase().includes(university.toLowerCase()))
+    // In-memory keyword filter for MVP
     if (q) {
       docs = docs.filter((d) => {
-        const hay = `${d.title} ${d.description} ${d.category} ${d.competition} ${d.university} ${(d.topics || []).join(" ")} ${(d.companies || []).join(" ")}`.toLowerCase()
+        const hay = `${d.title} ${d.description ?? ""} ${d.category} ${d.competition ?? ""} ${d.university ?? ""} ${(d.topics || []).join(" ")} ${(d.companies || []).join(" ")}`.toLowerCase()
         return hay.includes(q)
       })
     }
 
     const items = docs.slice(0, limit)
     const last = items[items.length - 1]
-    const nextCursor = docs.length > limit && last?.createdAt
-      ? Buffer.from(JSON.stringify({ createdAt: (last.createdAt as FirebaseFirestore.Timestamp | Date) instanceof Date ? (last.createdAt as Date).toISOString() : new Date((last.createdAt as any)?._seconds ? (last.createdAt as any)._seconds * 1000 : Date.now()).toISOString() })).toString("base64")
+    const nextCursor = docs.length > limit && last?.created_at
+      ? Buffer.from(JSON.stringify({ created_at: last.created_at })).toString("base64")
       : null
 
     return NextResponse.json({ items, nextCursor })

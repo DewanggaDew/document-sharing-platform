@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Navbar } from "@/components/navbar";
 import { getIdToken } from "@/lib/auth/client";
 import { useLoading } from "@/components/loading-provider";
+import { useToast } from "@/hooks/use-toast";
 
 type PaperDetail = {
 	id: string;
@@ -87,6 +88,7 @@ export default function DocumentViewerPage() {
 	const [doc, setDoc] = useState<PaperDetail | null>(null);
 	const router = useRouter();
 	const { setLoading } = useLoading();
+	const { toast } = useToast();
 
 	const handleDownload = async () => {
 		try {
@@ -102,7 +104,16 @@ export default function DocumentViewerPage() {
 				throw new Error(err.error || "Download not allowed");
 			}
 			const data = await res.json();
-			window.location.href = data.url;
+			toast({ title: "Your file is downloading…" });
+			const iframe = document.createElement("iframe");
+			iframe.style.display = "none";
+			iframe.src = data.url;
+			document.body.appendChild(iframe);
+			setTimeout(() => {
+				try {
+					document.body.removeChild(iframe);
+				} catch {}
+			}, 5000);
 		} catch (e: any) {
 			alert(e?.message || "Download failed");
 		}
@@ -157,7 +168,14 @@ export default function DocumentViewerPage() {
 		fetch(`/api/papers/${id}`)
 			.then((r) => (r.ok ? r.json() : Promise.reject()))
 			.then((d) => {
-				if (mounted) setDoc(d);
+				// Map snake_case fields from Supabase to camelCase UI expectations
+				const mapped = {
+					...d,
+					fileType: d.file_type ?? d.fileType,
+					fileSize: d.file_size ?? d.fileSize,
+					storagePath: d.storage_path ?? d.storagePath,
+				};
+				if (mounted) setDoc(mapped);
 			})
 			.catch(() => {});
 		return () => {

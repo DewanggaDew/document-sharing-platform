@@ -34,6 +34,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Navbar } from "@/components/navbar";
 import { useLoading } from "@/components/loading-provider";
+import { getIdToken } from "@/lib/auth/client";
+import { useToast } from "@/hooks/use-toast";
 
 // Remote data fetched from /api/papers
 type Paper = {
@@ -50,7 +52,7 @@ type Paper = {
 	downloads?: number;
 	views?: number;
 	likes?: number;
-	createdAt?: any;
+	created_at?: string;
 };
 
 const categories = [
@@ -79,6 +81,7 @@ export default function SearchPage() {
 	const [showFilters, setShowFilters] = useState(false);
 	const router = useRouter();
 	const { setLoading } = useLoading();
+	const { toast } = useToast();
 	const [cursor, setCursor] = useState<string | null>(null);
 	const [isLoadingPage, setIsLoadingPage] = useState(false);
 
@@ -113,16 +116,8 @@ export default function SearchPage() {
 				case "recent":
 					items = [...items].sort(
 						(a, b) =>
-							new Date(
-								(b as any).createdAt?._seconds
-									? (b as any).createdAt._seconds * 1000
-									: 0
-							).getTime() -
-							new Date(
-								(a as any).createdAt?._seconds
-									? (a as any).createdAt._seconds * 1000
-									: 0
-							).getTime()
+							new Date(b.created_at || 0).getTime() -
+							new Date(a.created_at || 0).getTime()
 					);
 					break;
 				case "views":
@@ -154,6 +149,33 @@ export default function SearchPage() {
 	const handleNavigation = (path: string) => {
 		setLoading(true);
 		router.push(path);
+	};
+
+	const handleDownloadDoc = async (id: string) => {
+		try {
+			const token = await getIdToken(true);
+			const headers: HeadersInit = token
+				? { Authorization: `Bearer ${token}` }
+				: {};
+			const res = await fetch(`/api/papers/${id}/download`, { headers });
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.error || "Download not allowed");
+			}
+			const data = await res.json();
+			toast({ title: "Your file is downloading…" });
+			const iframe = document.createElement("iframe");
+			iframe.style.display = "none";
+			iframe.src = data.url;
+			document.body.appendChild(iframe);
+			setTimeout(() => {
+				try {
+					document.body.removeChild(iframe);
+				} catch {}
+			}, 5000);
+		} catch (e: any) {
+			alert(e?.message || "Download failed");
+		}
 	};
 
 	const loadMore = async () => {
@@ -442,12 +464,12 @@ export default function SearchPage() {
 															{topic}
 														</Badge>
 													))}
-													{doc.topics.length > 3 && (
+													{(doc.topics || []).length > 3 && (
 														<Badge
 															variant="outline"
 															className="text-xs"
 														>
-															+{doc.topics.length - 3} more
+															+{(doc.topics || []).length - 3} more
 														</Badge>
 													)}
 												</div>
@@ -496,7 +518,12 @@ export default function SearchPage() {
 												>
 													View
 												</Button>
-												<Button size="sm">Download</Button>
+												<Button
+													size="sm"
+													onClick={() => handleDownloadDoc(doc.id)}
+												>
+													Download
+												</Button>
 											</div>
 										</div>
 									</CardContent>

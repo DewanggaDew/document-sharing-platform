@@ -22,131 +22,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Navbar } from "@/components/navbar";
 import { useLoading } from "@/components/loading-provider";
-import { onAuthChanged } from "@/lib/auth/client";
-import { getFirestoreDb } from "@/lib/firebase/client";
-import {
-	collection,
-	getDocs,
-	query,
-	where,
-	type DocumentData,
-} from "firebase/firestore";
+import { onAuthChanged, getIdToken } from "@/lib/auth/client";
+import type { PaperRow, FlagRow } from "@/lib/supabase/types";
 import React from "react";
-import {
-	collection as fbCollection,
-	getDocs as fbGetDocs,
-	query as fbQuery,
-	where as fbWhere,
-} from "firebase/firestore";
-
-// Remove mock data and use live data
-// Mock user data
-const userData = {
-	name: "Sarah Chen",
-	email: "sarah.chen@wharton.upenn.edu",
-	university: "Wharton School",
-	joinDate: "March 2024",
-	avatar: "/professional-woman-diverse.png",
-	stats: {
-		documentsUploaded: 3,
-		totalDownloads: 2847,
-		totalViews: 8934,
-		totalLikes: 234,
-	},
-};
-
-const uploadedDocuments = [
-	{
-		id: "tesla-q3-2024-analysis",
-		title: "Tesla Q3 2024 Equity Analysis",
-		competition: "CFA Institute Research Challenge",
-		year: "2024",
-		category: "Equity Research",
-		status: "Published",
-		downloads: 1247,
-		views: 3892,
-		likes: 89,
-		uploadDate: "2024-03-15",
-	},
-	{
-		id: "apple-valuation-model",
-		title: "Apple Inc. DCF Valuation Model",
-		competition: "Investment Banking Case Study",
-		year: "2024",
-		category: "Financial Modeling",
-		status: "Published",
-		downloads: 892,
-		views: 2341,
-		likes: 67,
-		uploadDate: "2024-02-28",
-	},
-	{
-		id: "sustainability-report-draft",
-		title: "Corporate Sustainability Analysis",
-		competition: "ESG Case Competition",
-		year: "2024",
-		category: "ESG Analysis",
-		status: "Draft",
-		downloads: 0,
-		views: 0,
-		likes: 0,
-		uploadDate: "2024-03-20",
-	},
-];
-
-const downloadHistory = [
-	{
-		id: "ford-strategic-analysis",
-		title: "Ford Motor Company Strategic Analysis",
-		author: "Team Delta",
-		university: "MIT Sloan",
-		downloadDate: "2024-03-18",
-		category: "Business Case",
-	},
-	{
-		id: "coca-cola-financial-analysis",
-		title: "Coca-Cola Financial Statement Analysis",
-		author: "Team Gamma",
-		university: "Stanford GSB",
-		downloadDate: "2024-03-16",
-		category: "Accounting",
-	},
-	{
-		id: "mckinsey-digital-case",
-		title: "McKinsey Digital Transformation Case",
-		author: "Team Beta",
-		university: "Harvard Business School",
-		downloadDate: "2024-03-14",
-		category: "Business Case",
-	},
-];
-
-const recommendations = [
-	{
-		id: "ev-market-analysis",
-		title: "Electric Vehicle Market Analysis 2024",
-		competition: "BCG Strategy Contest",
-		university: "Chicago Booth",
-		reason: "Based on your Tesla analysis",
-		category: "Market Research",
-	},
-	{
-		id: "renewable-energy-valuation",
-		title: "Renewable Energy Sector Valuation",
-		competition: "Goldman Sachs Case Study",
-		university: "MIT Sloan",
-		reason: "Similar to your interests",
-		category: "Valuation",
-	},
-	{
-		id: "tech-company-analysis",
-		title: "Big Tech Financial Analysis",
-		competition: "JP Morgan Case Competition",
-		university: "Columbia Business School",
-		reason: "Based on your Apple model",
-		category: "Financial Analysis",
-	},
-];
+// Removed mock data and Firestore; using Supabase via /api/me
 
 export default function DashboardPage() {
 	const [activeTab, setActiveTab] = useState("overview");
@@ -156,14 +35,14 @@ export default function DashboardPage() {
 	const [userName, setUserName] = useState<string | null>(null);
 	const [userEmail, setUserEmail] = useState<string | null>(null);
 	const [userAvatar] = useState<string | null>(null);
-	const [uploads, setUploads] = useState<DocumentData[]>([]);
+	const [uploads, setUploads] = useState<PaperRow[]>([]);
 	const [stats, setStats] = useState({
 		documentsUploaded: 0,
 		totalDownloads: 0,
 		totalViews: 0,
 		totalLikes: 0,
 	});
-	const [myFlags, setMyFlags] = useState<DocumentData[]>([]);
+	const [myFlags, setMyFlags] = useState<FlagRow[]>([]);
 
 	// Fetch current user and their uploads
 	React.useEffect(() => {
@@ -183,43 +62,26 @@ export default function DashboardPage() {
 			}
 
 			try {
-				const db = getFirestoreDb();
-				const papersQ = query(
-					collection(db, "papers"),
-					where("authorUserId", "==", u.uid)
-				);
-				const snap = await getDocs(papersQ);
-				const items = snap.docs.map((d) => ({
-					id: d.id,
-					...(d.data() as any),
-				}));
-				setUploads(items);
-				const totals = items.reduce(
-					(acc, p) => {
-						acc.totalDownloads += Number(p.downloads || 0);
-						acc.totalViews += Number(p.views || 0);
-						acc.totalLikes += Number(p.likes || 0);
-						return acc;
-					},
-					{
-						documentsUploaded: items.length,
+				const token = await getIdToken();
+				if (!token) return;
+				const res = await fetch("/api/me", {
+					headers: { Authorization: `Bearer ${token}` },
+					cache: "no-store",
+				});
+				if (!res.ok) return;
+				const data = await res.json();
+				setUploads(data.uploads || []);
+				setStats(
+					data.stats || {
+						documentsUploaded: 0,
 						totalDownloads: 0,
 						totalViews: 0,
 						totalLikes: 0,
 					}
 				);
-				setStats(totals);
-				// load my flags
-				const flagsQ = fbQuery(
-					fbCollection(db, "flags"),
-					fbWhere("userId", "==", u.uid)
-				);
-				const flagsSnap = await fbGetDocs(flagsQ);
-				setMyFlags(
-					flagsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
-				);
-			} catch (e) {
-				// best-effort; leave empty on error
+				setMyFlags(data.flags || []);
+			} catch {
+				// ignore
 			}
 		});
 		return () => unsub();
@@ -427,42 +289,38 @@ export default function DashboardPage() {
 													<h4 className="font-semibold text-lg">{doc.title}</h4>
 													<Badge
 														variant={
-															(doc as any).status === "Published"
+															(doc.status === "active"
 																? "default"
-																: "secondary"
+																: "secondary") as any
 														}
 													>
-														{(doc as any).status || "Published"}
+														{doc.status === "active" ? "Published" : doc.status}
 													</Badge>
 												</div>
 												<div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
 													<span>
-														{(doc as any).competition} • {(doc as any).year}
+														{doc.competition} • {doc.year}
 													</span>
-													<Badge variant="outline">
-														{(doc as any).category}
-													</Badge>
+													<Badge variant="outline">{doc.category}</Badge>
 												</div>
 												<div className="flex items-center gap-6 text-sm text-muted-foreground">
 													<div className="flex items-center gap-1">
 														<Download className="h-4 w-4" />
 														<span>
-															{Number(
-																(doc as any).downloads || 0
-															).toLocaleString("en-US")}
-														</span>
-													</div>
-													<div className="flex items-center gap-1">
-														<Eye className="h-4 w-4" />
-														<span>
-															{Number((doc as any).views || 0).toLocaleString(
+															{Number(doc.downloads || 0).toLocaleString(
 																"en-US"
 															)}
 														</span>
 													</div>
 													<div className="flex items-center gap-1">
+														<Eye className="h-4 w-4" />
+														<span>
+															{Number(doc.views || 0).toLocaleString("en-US")}
+														</span>
+													</div>
+													<div className="flex items-center gap-1">
 														<Heart className="h-4 w-4" />
-														<span>{Number((doc as any).likes || 0)}</span>
+														<span>{Number(doc.likes || 0)}</span>
 													</div>
 												</div>
 											</div>
@@ -525,7 +383,7 @@ export default function DashboardPage() {
 											<div className="flex items-center justify-between text-sm">
 												<div>
 													<div className="font-medium">
-														Paper ID: {f.paperId}
+														Paper ID: {f.paper_id}
 													</div>
 													<div className="text-muted-foreground">
 														Reason: {f.reason}

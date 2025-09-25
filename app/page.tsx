@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
 	Search,
@@ -27,6 +27,18 @@ export default function HomePage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const router = useRouter();
 	const { setLoading } = useLoading();
+
+	const [featuredDocuments, setFeaturedDocuments] = useState<
+		Array<{
+			id: string;
+			title: string;
+			competition?: string;
+			year?: number;
+			university?: string;
+			topics?: string[];
+			downloads?: number;
+		}>
+	>([]);
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -70,32 +82,24 @@ export default function HomePage() {
 		},
 	];
 
-	const featuredDocuments = [
-		{
-			title: "Tesla Q3 2024 Equity Analysis",
-			competition: "CFA Institute Research Challenge",
-			year: "2024",
-			university: "Wharton School",
-			topics: ["Electric Vehicles", "Renewable Energy", "Financial Modeling"],
-			downloads: 1247,
-		},
-		{
-			title: "McKinsey Case: Digital Transformation Strategy",
-			competition: "Case Competition World Championship",
-			year: "2024",
-			university: "Harvard Business School",
-			topics: ["Digital Strategy", "Change Management", "Technology"],
-			downloads: 892,
-		},
-		{
-			title: "Coca-Cola Financial Statement Analysis",
-			competition: "National Accounting Case Competition",
-			year: "2023",
-			university: "Stanford Graduate School",
-			topics: ["Financial Analysis", "Ratio Analysis", "Valuation"],
-			downloads: 634,
-		},
-	];
+	useEffect(() => {
+		let mounted = true;
+		(async () => {
+			try {
+				const res = await fetch(`/api/papers?limit=30`, { cache: "no-store" });
+				if (!res.ok) return;
+				const data = await res.json();
+				const items = (data.items || []) as any[];
+				const sorted = [...items]
+					.sort((a, b) => (b.downloads || 0) - (a.downloads || 0))
+					.slice(0, 6);
+				if (mounted) setFeaturedDocuments(sorted);
+			} catch {}
+		})();
+		return () => {
+			mounted = false;
+		};
+	}, []);
 
 	return (
 		<div className="min-h-screen bg-background">
@@ -216,18 +220,11 @@ export default function HomePage() {
 					</div>
 
 					<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-						{featuredDocuments.map((doc, index) => (
+						{featuredDocuments.map((doc) => (
 							<Card
-								key={index}
+								key={doc.id}
 								className="notion-hover cursor-pointer border-border/60 shadow-sm bg-background"
-								onClick={() =>
-									handleNavigation(
-										`/document/${doc.title
-											.toLowerCase()
-											.replace(/\s+/g, "-")
-											.replace(/[^a-z0-9-]/g, "")}`
-									)
-								}
+								onClick={() => handleNavigation(`/document/${doc.id}`)}
 							>
 								<CardHeader className="pb-4">
 									<CardTitle className="text-base font-semibold text-balance leading-snug">
@@ -246,7 +243,7 @@ export default function HomePage() {
 								</CardHeader>
 								<CardContent className="pt-0">
 									<div className="flex flex-wrap gap-1 mb-4">
-										{doc.topics.slice(0, 2).map((topic, topicIndex) => (
+										{(doc.topics || []).slice(0, 2).map((topic, topicIndex) => (
 											<Badge
 												key={topicIndex}
 												variant="outline"
@@ -255,18 +252,19 @@ export default function HomePage() {
 												{topic}
 											</Badge>
 										))}
-										{doc.topics.length > 2 && (
+										{(doc.topics || []).length > 2 && (
 											<Badge
 												variant="outline"
 												className="text-xs px-2 py-0.5"
 											>
-												+{doc.topics.length - 2} more
+												+{(doc.topics || []).length - 2} more
 											</Badge>
 										)}
 									</div>
 									<div className="flex items-center justify-between text-xs text-muted-foreground">
 										<span className="font-medium">
-											{Number(doc.downloads).toLocaleString("en-US")} downloads
+											{Number(doc.downloads || 0).toLocaleString("en-US")}{" "}
+											downloads
 										</span>
 										<Button
 											size="sm"
@@ -274,12 +272,7 @@ export default function HomePage() {
 											className="h-7 px-2 text-xs notion-hover"
 											onClick={(e) => {
 												e.stopPropagation();
-												handleNavigation(
-													`/document/${doc.title
-														.toLowerCase()
-														.replace(/\s+/g, "-")
-														.replace(/[^a-z0-9-]/g, "")}`
-												);
+												handleNavigation(`/document/${doc.id}`);
 											}}
 										>
 											View
