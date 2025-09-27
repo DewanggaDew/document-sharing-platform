@@ -11,11 +11,7 @@ import {
 	Building,
 	Users,
 	Eye,
-	ChevronLeft,
-	ChevronRight,
-	ZoomIn,
-	ZoomOut,
-	RotateCw,
+	ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,41 +78,72 @@ const relatedDocuments = [
 ];
 
 export default function DocumentViewerPage() {
-	const [currentPage, setCurrentPage] = useState(1);
-	const [zoom, setZoom] = useState(100);
 	const [isLiked, setIsLiked] = useState(false);
 	const [doc, setDoc] = useState<PaperDetail | null>(null);
 	const router = useRouter();
 	const { setLoading } = useLoading();
 	const { toast } = useToast();
+	const [isDownloading, setIsDownloading] = useState(false);
 
 	const handleDownload = async () => {
+		if (isDownloading || !doc?.id) return;
 		try {
+			setIsDownloading(true);
 			const token = await getIdToken(true);
 			const headers: HeadersInit = token
 				? { Authorization: `Bearer ${token}` }
 				: {};
-			const res = await fetch(`/api/papers/${(doc as any)?.id}/download`, {
+			const res = await fetch(`/api/papers/${doc.id}/download`, {
 				headers,
 			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
 				throw new Error(err.error || "Download not allowed");
 			}
-			const data = await res.json();
+			const downloadsHeader = res.headers.get("X-Downloads");
+			const nextDownloads = downloadsHeader
+				? Number.parseInt(downloadsHeader, 10)
+				: undefined;
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const disposition = res.headers.get("Content-Disposition") ?? "";
+			const match = disposition.match(/filename="?([^";]+)"?/i);
+			let filename = match?.[1];
+			if (!filename) {
+				const storagePath =
+					(doc as any)?.storagePath || (doc as any)?.storage_path;
+				filename = storagePath
+					? storagePath.split("/").pop() ?? undefined
+					: undefined;
+			}
+			const link = document.createElement("a");
+			link.href = url;
+			if (filename) link.download = filename;
+			link.rel = "noopener";
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
 			toast({ title: "Your file is downloading…" });
-			const iframe = document.createElement("iframe");
-			iframe.style.display = "none";
-			iframe.src = data.url;
-			document.body.appendChild(iframe);
-			setTimeout(() => {
-				try {
-					document.body.removeChild(iframe);
-				} catch {}
-			}, 5000);
+			setDoc((prev) =>
+				prev
+					? {
+							...prev,
+							downloads: nextDownloads ?? (prev.downloads || 0) + 1,
+					  }
+					: prev
+			);
+			setTimeout(() => URL.revokeObjectURL(url), 4000);
 		} catch (e: any) {
 			alert(e?.message || "Download failed");
+		} finally {
+			setIsDownloading(false);
 		}
+	};
+
+	const handleOpenPreview = () => {
+		if (!doc?.id) return;
+		const url = `/api/papers/${(doc as any).id}/view`;
+		window.open(url, "_blank", "noopener,noreferrer");
 	};
 
 	const handleShare = () => {
@@ -245,82 +272,43 @@ export default function DocumentViewerPage() {
 
 						{/* PDF Viewer */}
 						<Card>
-							<CardHeader className="pb-4">
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-4">
-										<span className="text-sm text-muted-foreground">
-											Page {currentPage}
-										</span>
-										<div className="flex items-center gap-2">
-											<Button
-												variant="outline"
-												size="sm"
-												onClick={() =>
-													setCurrentPage(Math.max(1, currentPage - 1))
-												}
-												disabled={currentPage === 1}
-											>
-												<ChevronLeft className="h-4 w-4" />
-											</Button>
-											<Button
-												variant="outline"
-												size="sm"
-												onClick={() => setCurrentPage(currentPage + 1)}
-												disabled={false}
-											>
-												<ChevronRight className="h-4 w-4" />
-											</Button>
-										</div>
-									</div>
-									<div className="flex items-center gap-2">
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={() => setZoom(Math.max(50, zoom - 25))}
-											disabled={zoom <= 50}
-										>
-											<ZoomOut className="h-4 w-4" />
-										</Button>
-										<span className="text-sm text-muted-foreground min-w-16 text-center">
-											{zoom}%
-										</span>
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={() => setZoom(Math.min(200, zoom + 25))}
-											disabled={zoom >= 200}
-										>
-											<ZoomIn className="h-4 w-4" />
-										</Button>
-										<Button
-											variant="outline"
-											size="sm"
-										>
-											<RotateCw className="h-4 w-4" />
-										</Button>
-									</div>
+							<CardHeader className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
+								<div>
+									<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+										Preview
+									</p>
+									<p className="text-sm text-muted-foreground">
+										Rendered with your browser for quick viewing.
+									</p>
+								</div>
+								<div className="flex items-center gap-2">
+									<Button
+										variant="ghost"
+										size="sm"
+										className="gap-2"
+										onClick={handleOpenPreview}
+									>
+										<ExternalLink className="h-4 w-4" />
+										Open in new tab
+									</Button>
 								</div>
 							</CardHeader>
 							<CardContent>
-								{/* PDF Preview Placeholder */}
 								<div
 									className="bg-muted rounded-lg border border-border overflow-hidden shadow-sm"
-									style={{
-										height: `${(842 * zoom) / 100}px`,
-										maxHeight: "100vh",
-									}}
+									style={{ height: "clamp(600px, 85vh, 960px)" }}
 								>
 									{doc?.id ? (
 										<iframe
 											title="Document preview"
-											className="w-full h-full"
+											className="h-full w-full"
 											src={`/api/papers/${(doc as any).id}/view`}
 										/>
 									) : (
-										<div className="flex items-center justify-center h-full">
+										<div className="flex h-full items-center justify-center">
 											<div className="text-center">
-												<BookOpen className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-												<p className="text-muted-foreground font-medium">
+												<BookOpen className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+												<p className="font-medium text-muted-foreground">
 													PDF Preview
 												</p>
 											</div>

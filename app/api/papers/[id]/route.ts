@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { unstable_noStore as noStore } from "next/cache"
 import { getSupabaseServer } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
+    noStore()
     const supabase = getSupabaseServer()
     const { data: row, error } = await supabase
       .from("papers")
@@ -23,18 +25,19 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const views = (row.views || 0) + 1
-    const { error: updateErr } = await supabase
-      .from("papers")
-      .update({ views, updated_at: new Date().toISOString() })
-      .eq("id", params.id)
-
+    const { data: updated, error: updateErr } = await supabase.rpc("increment_paper_views", { paper_uuid: params.id, step: 1 })
     if (updateErr) {
-      // Log but still return the original row
       console.error("/api/papers/[id] increment views error", updateErr)
     }
 
-    return NextResponse.json({ ...row, views })
+    const latest = updated ?? row
+
+    return NextResponse.json({
+      ...latest,
+      views: Number(latest?.views ?? 0),
+      downloads: Number(latest?.downloads ?? 0),
+      likes: Number(latest?.likes ?? 0),
+    })
   } catch (err: any) {
     console.error("/api/papers/[id] error", err)
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })

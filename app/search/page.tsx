@@ -168,17 +168,34 @@ export default function SearchPage() {
 				const err = await res.json().catch(() => ({}));
 				throw new Error(err.error || "Download not allowed");
 			}
-			const data = await res.json();
+			const downloadsHeader = res.headers.get("X-Downloads");
+			const nextDownloads = downloadsHeader
+				? Number.parseInt(downloadsHeader, 10)
+				: undefined;
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const disposition = res.headers.get("Content-Disposition") ?? "";
+			const match = disposition.match(/filename="?([^";]+)"?/i);
+			const filename = match?.[1] || "document";
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download = filename;
+			anchor.rel = "noopener";
+			document.body.appendChild(anchor);
+			anchor.click();
+			document.body.removeChild(anchor);
+			setTimeout(() => URL.revokeObjectURL(url), 2000);
 			toast({ title: "Your file is downloading…" });
-			const iframe = document.createElement("iframe");
-			iframe.style.display = "none";
-			iframe.src = data.url;
-			document.body.appendChild(iframe);
-			setTimeout(() => {
-				try {
-					document.body.removeChild(iframe);
-				} catch {}
-			}, 5000);
+			setFilteredDocuments((prev) =>
+				prev.map((paper) =>
+					paper.id === id
+						? {
+								...paper,
+								downloads: nextDownloads ?? (paper.downloads || 0) + 1,
+						  }
+						: paper
+				)
+			);
 		} catch (e: any) {
 			alert(e?.message || "Download failed");
 		}

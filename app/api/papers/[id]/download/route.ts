@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { unstable_noStore as noStore } from "next/cache"
 import { requireAuth } from "@/lib/server/auth"
 import { getSupabaseServer } from "@/lib/supabase/server"
 
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
+    noStore()
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization") || undefined
     const decoded = await requireAuth(authHeader)
     const userId = decoded.uid
@@ -48,27 +50,31 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const storagePath = paper.storage_path as string
 
-    // Signed URL (1 hour)
-    const fileName = (storagePath.split("/").pop() || "document").toString()
-    const { data: signed, error: urlErr } = await supabase
+    const { data: fileData, error: downloadErr } = await supabase
       .storage
       .from("papers")
-      .createSignedUrl(storagePath, 60 * 60, { download: fileName })
+      .download(storagePath)
 
-    if (urlErr) {
-      return NextResponse.json({ error: urlErr.message }, { status: 500 })
+    if (downloadErr || !fileData) {
+      return NextResponse.json({ error: downloadErr?.message || "Download failed" }, { status: 500 })
     }
 
-    // Increment downloads (best-effort)
-    const { error: updateErr } = await supabase
-      .from("papers")
-      .update({ downloads: (paper.downloads || 0) + 1, updated_at: new Date().toISOString() })
-      .eq("id", params.id)
+    const { data: updatedPaper, error: updateErr } = await supabase
+      .rpc("increment_paper_downloads", { paper_uuid: params.id, step: 1 })
     if (updateErr) {
       console.error("/api/papers/[id]/download increment downloads error", updateErr)
     }
 
-    return NextResponse.json({ url: signed?.signedUrl })
+    const readableStream = fileData.stream()
+    const fileName = (storagePath.split("/").pop() || "document").toString()
+    return new NextResponse(readableStream, {
+      headers: {
+        "Content-Type": (paper.file_type as string) || "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "private, no-store",
+        "X-Downloads": updatedPaper?.downloads ? String(updatedPaper.downloads) : undefined,
+      },
+    })
   } catch (err: any) {
     console.error("/api/papers/[id]/download error", err)
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })

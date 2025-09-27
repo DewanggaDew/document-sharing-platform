@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { unstable_noStore as noStore } from "next/cache"
 import { getSupabaseServer } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
+    noStore()
     const supabase = getSupabaseServer()
     const { data: paper, error: paperErr } = await supabase
       .from("papers")
@@ -27,9 +29,9 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
     if (dlErr || !data) return NextResponse.json({ error: dlErr?.message || "Download failed" }, { status: 500 })
 
-    const arrayBuffer = await data.arrayBuffer()
+    const readableStream = data.stream()
     const fileName = (paper.storage_path as string).split("/").pop() || "document.pdf"
-    return new NextResponse(Buffer.from(arrayBuffer), {
+    return new NextResponse(readableStream, {
       headers: {
         "Content-Type": (paper.file_type as string) || "application/pdf",
         "Content-Disposition": `inline; filename="${fileName}"`,
