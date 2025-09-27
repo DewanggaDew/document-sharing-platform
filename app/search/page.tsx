@@ -36,6 +36,7 @@ import { Navbar } from "@/components/navbar";
 import { useLoading } from "@/components/loading-provider";
 import { getIdToken } from "@/lib/auth/client";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Remote data fetched from /api/papers
 type Paper = {
@@ -53,6 +54,19 @@ type Paper = {
 	views?: number;
 	likes?: number;
 	created_at?: string;
+};
+
+type SemanticResult = {
+	id: string;
+	similarity: number;
+	title: string;
+	description?: string;
+	category: string;
+	competition?: string;
+	year?: number;
+	university?: string;
+	topics?: string[];
+	companies?: string[];
 };
 
 const categories = [
@@ -84,6 +98,10 @@ export default function SearchPage() {
 	const { toast } = useToast();
 	const [cursor, setCursor] = useState<string | null>(null);
 	const [isLoadingPage, setIsLoadingPage] = useState(false);
+	const [semanticResults, setSemanticResults] = useState<SemanticResult[]>([]);
+	const [semanticLoading, setSemanticLoading] = useState(false);
+	const [semanticError, setSemanticError] = useState<string | null>(null);
+	const [showSemantic, setShowSemantic] = useState(true);
 
 	// Filter and sort documents
 	useEffect(() => {
@@ -102,50 +120,99 @@ export default function SearchPage() {
 					: "recent";
 			params.set("sort", apiSort);
 			params.set("limit", "20");
-			const res = await fetch(`/api/papers?${params.toString()}`, {
-				signal: controller.signal,
-			});
-			if (!res.ok) {
+			try {
+				const res = await fetch(`/api/papers?${params.toString()}`, {
+					signal: controller.signal,
+				});
+				if (!res.ok) {
+					setIsLoadingPage(false);
+					return;
+				}
+				const data = await res.json();
+				if (!active) return;
+				let items: Paper[] = data.items || [];
+				// Local sort options
+				switch (sortBy) {
+					case "downloads":
+						items = [...items].sort(
+							(a, b) => (b.downloads || 0) - (a.downloads || 0)
+						);
+						break;
+					case "recent":
+						items = [...items].sort(
+							(a, b) =>
+								new Date(b.created_at || 0).getTime() -
+								new Date(a.created_at || 0).getTime()
+						);
+						break;
+					case "views":
+						items = [...items].sort((a, b) => (b.views || 0) - (a.views || 0));
+						break;
+					case "likes":
+						items = [...items].sort((a, b) => (b.likes || 0) - (a.likes || 0));
+						break;
+					default:
+						break;
+				}
+				setFilteredDocuments(items);
+				setCursor(data.nextCursor || null);
 				setIsLoadingPage(false);
-				return;
+			} catch (err: any) {
+				if (err?.name === "AbortError") return;
+				console.error("/search fetch error", err);
+				setIsLoadingPage(false);
 			}
-			const data = await res.json();
-			if (!active) return;
-			let items: Paper[] = data.items || [];
-			// Local sort options
-			switch (sortBy) {
-				case "downloads":
-					items = [...items].sort(
-						(a, b) => (b.downloads || 0) - (a.downloads || 0)
-					);
-					break;
-				case "recent":
-					items = [...items].sort(
-						(a, b) =>
-							new Date(b.created_at || 0).getTime() -
-							new Date(a.created_at || 0).getTime()
-					);
-					break;
-				case "views":
-					items = [...items].sort((a, b) => (b.views || 0) - (a.views || 0));
-					break;
-				case "likes":
-					items = [...items].sort((a, b) => (b.likes || 0) - (a.likes || 0));
-					break;
-				default:
-					break;
-			}
-			setFilteredDocuments(items);
-			setCursor(data.nextCursor || null);
-			setIsLoadingPage(false);
 		};
 		const id = setTimeout(fetchResults, 250);
 		return () => {
 			active = false;
 			controller.abort();
+			controller.signal.onabort = null;
 			clearTimeout(id);
 		};
 	}, [searchQuery, selectedCategory, selectedYear, sortBy]);
+
+	useEffect(() => {
+		const query = searchQuery.trim();
+		if (!query) {
+			setSemanticResults([]);
+			setSemanticError(null);
+			return;
+		}
+		let cancelled = false;
+		const controller = new AbortController();
+		setSemanticLoading(true);
+		setSemanticError(null);
+		const id = setTimeout(async () => {
+			try {
+				const res = await fetch(`/api/search/semantic`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ query, limit: 6 }),
+					signal: controller.signal,
+				});
+				if (!res.ok) {
+					const err = await res.json().catch(() => ({}));
+					throw new Error(err.error || "Semantic search failed");
+				}
+				const data = await res.json();
+				if (!cancelled) {
+					setSemanticResults(data.items || []);
+					setSemanticLoading(false);
+				}
+			} catch (err: any) {
+				if (cancelled) return;
+				if (err.name === "AbortError") return;
+				setSemanticLoading(false);
+				setSemanticError(err?.message || "Semantic search failed");
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			controller.abort();
+			clearTimeout(id);
+		};
+	}, [searchQuery]);
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -232,6 +299,97 @@ export default function SearchPage() {
 			<Navbar />
 
 			<div className="container mx-auto px-4 py-6">
+				{searchQuery.trim() && showSemantic && (
+					<Card className="mb-6">
+						<CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+							<div>
+								<CardTitle className="text-base">Semantic matches</CardTitle>
+								<CardDescription>
+									Results suggested by Gemini embeddings for “
+									{searchQuery.trim()}”.
+								</CardDescription>
+							</div>
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => setShowSemantic(false)}
+							>
+								Dismiss
+							</Button>
+						</CardHeader>
+						<CardContent>
+							{semanticError && (
+								<p className="text-sm text-destructive mb-2">{semanticError}</p>
+							)}
+							{semanticLoading ? (
+								<div className="grid gap-3 md:grid-cols-2">
+									{Array.from({ length: 4 }).map((_, idx) => (
+										<Skeleton
+											key={idx}
+											className="h-16"
+										/>
+									))}
+								</div>
+							) : semanticResults.length === 0 ? (
+								<p className="text-sm text-muted-foreground">
+									No semantic suggestions yet. Try refining your search
+									keywords.
+								</p>
+							) : (
+								<div className="grid gap-4 md:grid-cols-2">
+									{semanticResults.map((result) => (
+										<Card
+											key={result.id}
+											className="hover:border-primary cursor-pointer"
+											onClick={() => handleNavigation(`/document/${result.id}`)}
+										>
+											<CardContent className="py-4">
+												<div className="flex items-center justify-between gap-3">
+													<h3 className="font-semibold text-sm line-clamp-2">
+														{result.title}
+													</h3>
+													<span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+														{(result.similarity * 100).toFixed(0)}% match
+													</span>
+												</div>
+												{result.description && (
+													<p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+														{result.description}
+													</p>
+												)}
+												<div className="flex flex-wrap gap-2 mt-3 text-[11px] text-muted-foreground">
+													{result.category && (
+														<span className="font-medium">
+															{result.category}
+														</span>
+													)}
+													{result.competition && (
+														<span>{result.competition}</span>
+													)}
+													{result.year && <span>{result.year}</span>}
+													{result.university && (
+														<span>{result.university}</span>
+													)}
+												</div>
+												<div className="flex gap-2 mt-2 flex-wrap">
+													{(result.topics || []).slice(0, 3).map((topic) => (
+														<Badge
+															key={topic}
+															variant="outline"
+															className="text-[11px]"
+														>
+															{topic}
+														</Badge>
+													))}
+												</div>
+											</CardContent>
+										</Card>
+									))}
+								</div>
+							)}
+						</CardContent>
+					</Card>
+				)}
 				{/* Search Header */}
 				<div className="mb-8">
 					<h2 className="text-3xl font-bold text-foreground mb-4">

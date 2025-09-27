@@ -37,6 +37,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       views: Number(latest?.views ?? 0),
       downloads: Number(latest?.downloads ?? 0),
       likes: Number(latest?.likes ?? 0),
+      file_size: Number(latest?.file_size ?? latest?.fileSize ?? 0),
     })
   } catch (err: any) {
     console.error("/api/papers/[id] error", err)

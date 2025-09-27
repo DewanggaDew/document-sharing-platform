@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { unstable_noStore as noStore } from "next/cache"
 import { getSupabaseServer } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: Request) {
   try {
+    noStore()
     const { searchParams } = new URL(req.url)
     const q = searchParams.get("q")?.toLowerCase().trim()
     const category = searchParams.get("category")
@@ -75,7 +77,15 @@ export async function GET(req: Request) {
       ? Buffer.from(JSON.stringify({ created_at: last.created_at })).toString("base64")
       : null
 
-    return NextResponse.json({ items, nextCursor })
+    const itemsWithNumbers = items.map((item) => ({
+      ...item,
+      views: Number(item.views ?? 0),
+      downloads: Number(item.downloads ?? 0),
+      likes: Number(item.likes ?? 0),
+      file_size: Number(item.file_size ?? item.fileSize ?? 0),
+    }))
+
+    return NextResponse.json({ items: itemsWithNumbers, nextCursor })
   } catch (err: any) {
     console.error("/api/papers error", err)
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })

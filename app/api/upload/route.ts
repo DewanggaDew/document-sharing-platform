@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAuth } from "@/lib/server/auth"
 import { uploadMetadataSchema } from "@/lib/validators/upload"
 import { getSupabaseServer } from "@/lib/supabase/server"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -100,6 +101,41 @@ export async function POST(req: Request) {
     const { data, error: dbErr } = await supabase.from("papers").insert(insert).select("id").single()
     if (dbErr) {
       return NextResponse.json({ error: `DB insert failed: ${dbErr.message}` }, { status: 500 })
+    }
+
+    // Best-effort: generate and store embedding for semantic search
+    try {
+      const apiKey = process.env.GOOGLE_GEMINI_API_KEY || ""
+      if (!apiKey) {
+        console.warn("GOOGLE_GEMINI_API_KEY not set; skipping embeddings")
+      } else {
+        const genAI = new GoogleGenerativeAI(apiKey)
+        const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
+        const textForEmbedding = [
+          meta.title,
+          meta.description ?? "",
+          meta.category,
+          meta.competition ?? "",
+          String(meta.year ?? ""),
+          meta.university ?? "",
+          (meta.topics ?? []).join(" "),
+          (meta.companies ?? []).join(" "),
+        ].join(" \n ")
+        const embeddingRes = await embedModel.embedContent(textForEmbedding)
+        const vec = (embeddingRes as any)?.embedding?.values as number[] | undefined
+        if (vec && Array.isArray(vec)) {
+          await supabase
+            .from("paper_embeddings")
+            .upsert({
+              paper_id: data.id,
+              content: textForEmbedding,
+              metadata: insert as any,
+              embedding: vec as any,
+            })
+        }
+      }
+    } catch (e) {
+      console.warn("embedding upsert failed", e)
     }
 
     return NextResponse.json({ paperId: data.id, storagePath: path })

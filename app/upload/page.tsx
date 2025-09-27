@@ -152,7 +152,8 @@ export default function UploadPage() {
 
 			const fd = new FormData();
 			// Only send the first file for MVP
-			fd.append("file", uploadedFiles[0].file);
+			const fileToUpload = uploadedFiles[0].file;
+			fd.append("file", fileToUpload);
 			fd.append(
 				"metadata",
 				JSON.stringify({
@@ -168,27 +169,62 @@ export default function UploadPage() {
 				})
 			);
 
-			const res = await fetch("/api/upload", {
-				method: "POST",
-				headers: { Authorization: `Bearer ${token}` },
-				body: fd,
+			const data = await new Promise<any>((resolve, reject) => {
+				const xhr = new XMLHttpRequest();
+				xhr.open("POST", "/api/upload");
+				xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+				xhr.responseType = "json";
+
+				xhr.upload.onloadstart = () => setUploadProgress(0);
+				xhr.upload.onprogress = (event) => {
+					if (!event) return;
+					if (event.lengthComputable && event.total > 0) {
+						setUploadProgress(Math.round((event.loaded / event.total) * 100));
+					} else if (fileToUpload.size > 0) {
+						const estimated = Math.round(
+							(event.loaded / fileToUpload.size) * 100
+						);
+						setUploadProgress(Math.min(99, Math.max(0, estimated)));
+					}
+				};
+
+				xhr.onload = () => {
+					const status = xhr.status;
+					const response =
+						typeof xhr.response === "object" && xhr.response !== null
+							? xhr.response
+							: (() => {
+									try {
+										return JSON.parse(xhr.responseText || "{}");
+									} catch {
+										return {};
+									}
+							  })();
+
+					if (status >= 200 && status < 300) {
+						setUploadProgress(100);
+						resolve(response);
+					} else {
+						const error = new Error(
+							response?.error || `Upload failed (${status})`
+						);
+						(error as any).details = response?.details;
+						reject(error);
+					}
+				};
+
+				xhr.onerror = () => {
+					reject(new Error("Network error during upload"));
+				};
+
+				xhr.onabort = () => {
+					reject(new Error("Upload aborted"));
+				};
+
+				xhr.send(fd);
 			});
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				let msg = err.error || "Upload failed";
-				const fieldErrors = err.details?.fieldErrors;
-				if (fieldErrors && typeof fieldErrors === "object") {
-					const lines = Object.entries(fieldErrors).flatMap(
-						([field, arr]: any) =>
-							(arr || []).map((m: string) => `${field}: ${m}`)
-					);
-					if (lines.length) msg += "\n" + lines.join("\n");
-				}
-				throw new Error(msg);
-			}
-			const data = await res.json();
+
 			setUploadProgress(100);
-			setIsUploading(false);
 			setUploadedFiles([]);
 			setFormData({
 				title: "",
@@ -204,7 +240,16 @@ export default function UploadPage() {
 			router.push(`/document/${data.paperId}`);
 		} catch (err: any) {
 			console.error("Upload failed:", err);
-			alert(err?.message || "Upload failed");
+			let message = err?.message || "Upload failed";
+			const fieldErrors = err?.details?.fieldErrors;
+			if (fieldErrors && typeof fieldErrors === "object") {
+				const lines = Object.entries(fieldErrors).flatMap(([field, arr]: any) =>
+					(arr || []).map((m: string) => `${field}: ${m}`)
+				);
+				if (lines.length) message += "\n" + lines.join("\n");
+			}
+			alert(message);
+		} finally {
 			setIsUploading(false);
 		}
 	};
