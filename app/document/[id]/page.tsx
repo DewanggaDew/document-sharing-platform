@@ -304,18 +304,28 @@ export default function DocumentViewerPage() {
 							<CardContent>
 								{/* PDF Preview Placeholder */}
 								<div
-									className="bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border"
-									style={{ height: `${400 * (zoom / 100)}px` }}
+									className="bg-muted rounded-lg border border-border overflow-hidden shadow-sm"
+									style={{
+										height: `${(842 * zoom) / 100}px`,
+										maxHeight: "100vh",
+									}}
 								>
-									<div className="text-center">
-										<BookOpen className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-										<p className="text-muted-foreground font-medium">
-											PDF Preview
-										</p>
-										<p className="text-sm text-muted-foreground">
-											Page {currentPage}
-										</p>
-									</div>
+									{doc?.id ? (
+										<iframe
+											title="Document preview"
+											className="w-full h-full"
+											src={`/api/papers/${(doc as any).id}/view`}
+										/>
+									) : (
+										<div className="flex items-center justify-center h-full">
+											<div className="text-center">
+												<BookOpen className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+												<p className="text-muted-foreground font-medium">
+													PDF Preview
+												</p>
+											</div>
+										</div>
+									)}
 								</div>
 							</CardContent>
 						</Card>

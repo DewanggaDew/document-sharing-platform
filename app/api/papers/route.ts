@@ -12,6 +12,7 @@ export async function GET(req: Request) {
     const year = searchParams.get("year")
     const competition = searchParams.get("competition")
     const university = searchParams.get("university")
+    const sort = (searchParams.get("sort") || "recent").toLowerCase()
     const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100)
     const cursorB64 = searchParams.get("cursor")
 
@@ -22,7 +23,17 @@ export async function GET(req: Request) {
       .from("papers")
       .select("*")
       .eq("status", "active")
-      .order("created_at", { ascending: false })
+    // Sorting
+    if (sort === "downloads") {
+      query = query.order("downloads", { ascending: false }).order("created_at", { ascending: false })
+    } else if (sort === "views") {
+      query = query.order("views", { ascending: false }).order("created_at", { ascending: false })
+    } else if (sort === "likes") {
+      query = query.order("likes", { ascending: false }).order("created_at", { ascending: false })
+    } else {
+      // recent/default
+      query = query.order("created_at", { ascending: false })
+    }
 
     // Server-side filters where simple
     if (category) query = query.eq("category", category)

@@ -95,6 +95,12 @@ export default function SearchPage() {
 			if (searchQuery.trim()) params.set("q", searchQuery);
 			if (selectedCategory !== "All") params.set("category", selectedCategory);
 			if (selectedYear !== "All") params.set("year", selectedYear);
+			// Map UI sort to API sort
+			const apiSort =
+				sortBy === "downloads" || sortBy === "views" || sortBy === "likes"
+					? sortBy
+					: "recent";
+			params.set("sort", apiSort);
 			params.set("limit", "20");
 			const res = await fetch(`/api/papers?${params.toString()}`, {
 				signal: controller.signal,
@@ -185,6 +191,11 @@ export default function SearchPage() {
 		if (searchQuery.trim()) params.set("q", searchQuery);
 		if (selectedCategory !== "All") params.set("category", selectedCategory);
 		if (selectedYear !== "All") params.set("year", selectedYear);
+		const apiSort =
+			sortBy === "downloads" || sortBy === "views" || sortBy === "likes"
+				? sortBy
+				: "recent";
+		params.set("sort", apiSort);
 		params.set("limit", "20");
 		params.set("cursor", cursor);
 		const res = await fetch(`/api/papers?${params.toString()}`);
