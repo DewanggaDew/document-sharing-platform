@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAuth } from "@/lib/server/auth"
 import { uploadMetadataSchema } from "@/lib/validators/upload"
 import { getSupabaseServer } from "@/lib/supabase/server"
+import { normalizeVector } from "@/lib/embeddings/normalize"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export const runtime = "nodejs"
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
     try {
       const apiKey = process.env.GOOGLE_GEMINI_API_KEY || ""
       if (!apiKey) {
-        console.warn("GOOGLE_GEMINI_API_KEY not set; skipping embeddings")
+        console.warn("/api/upload embedding skipped: GOOGLE_GEMINI_API_KEY missing")
       } else {
         const genAI = new GoogleGenerativeAI(apiKey)
         const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
@@ -121,21 +122,46 @@ export async function POST(req: Request) {
           (meta.topics ?? []).join(" "),
           (meta.companies ?? []).join(" "),
         ].join(" \n ")
-        const embeddingRes = await embedModel.embedContent(textForEmbedding)
+
+        const embedWithRetry = async () => {
+          const attempts = 3
+          for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+              return await embedModel.embedContent(textForEmbedding)
+            } catch (err: any) {
+              const status = err?.status || err?.statusCode
+              const retriable = status === 500 || status === 502 || status === 503 || status === 504
+              console.warn(
+                `/api/upload embedding attempt ${attempt} failed (status=${status ?? "n/a"})`,
+                err
+              )
+              if (!retriable || attempt === attempts) throw err
+              await new Promise((resolve) => setTimeout(resolve, 400 * attempt))
+            }
+          }
+        }
+
+        const embeddingRes = await embedWithRetry()
         const vec = (embeddingRes as any)?.embedding?.values as number[] | undefined
-        if (vec && Array.isArray(vec)) {
-          await supabase
+        if (vec && Array.isArray(vec) && vec.length > 0) {
+          const normalizedVec = normalizeVector(vec)
+          const { error: embedUpsertError } = await supabase
             .from("paper_embeddings")
             .upsert({
               paper_id: data.id,
               content: textForEmbedding,
               metadata: insert as any,
-              embedding: vec as any,
+              embedding: normalizedVec as any,
             })
+          if (embedUpsertError) {
+            console.error("/api/upload embedding upsert error", embedUpsertError)
+          }
+        } else {
+          console.warn("/api/upload embedding returned empty vector", embeddingRes)
         }
       }
     } catch (e) {
-      console.warn("embedding upsert failed", e)
+      console.warn("/api/upload embedding upsert failed", e)
     }
 
     return NextResponse.json({ paperId: data.id, storagePath: path })

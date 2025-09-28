@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { unstable_noStore as noStore } from "next/cache"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getSupabaseServer } from "@/lib/supabase/server"
+import { normalizeVector } from "@/lib/embeddings/normalize"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,17 +26,43 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
-    const embeddingRes = await embedModel.embedContent(body.query)
+    const embedWithRetry = async () => {
+      const attempts = 3
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+          return await embedModel.embedContent(body.query)
+        } catch (err: any) {
+          const status = err?.status || err?.statusCode
+          const retriable = status === 500 || status === 502 || status === 503 || status === 504
+          console.warn(
+            `/api/search/semantic embedding attempt ${attempt} failed (status=${status ?? "n/a"})`,
+            err
+          )
+          if (!retriable || attempt === attempts) throw err
+          await new Promise((resolve) => setTimeout(resolve, 400 * attempt))
+        }
+      }
+    }
+
+    const embeddingRes = await embedWithRetry()
     const vec = (embeddingRes as any)?.embedding?.values as number[] | undefined
-    if (!vec || !Array.isArray(vec)) return NextResponse.json({ error: "Embedding failed" }, { status: 500 })
+    if (!vec || !Array.isArray(vec)) {
+      console.warn("/api/search/semantic embedding returned empty vector", embeddingRes)
+      return NextResponse.json({ error: "Embedding failed" }, { status: 500 })
+    }
+
+    const normalizedVec = normalizeVector(vec)
 
     const supabase = getSupabaseServer()
     const { data, error } = await supabase.rpc("match_papers_semantic", {
-      query_embedding: vec as any,
+      query_embedding: normalizedVec as any,
       match_count: limit,
     })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error("/api/search/semantic match_papers_semantic error", error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     const matches = (data || []) as Array<MatchRow>
     let items: any[] = []

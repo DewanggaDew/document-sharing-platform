@@ -349,7 +349,13 @@ export default function SearchPage() {
 														{result.title}
 													</h3>
 													<span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-														{(result.similarity * 100).toFixed(0)}% match
+														{Math.round(
+															Math.min(
+																1,
+																Math.max(-1, result.similarity ?? 0)
+															) * 100
+														)}
+														% match
 													</span>
 												</div>
 												{result.description && (
