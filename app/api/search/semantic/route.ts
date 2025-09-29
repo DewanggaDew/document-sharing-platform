@@ -44,7 +44,21 @@ export async function POST(req: Request) {
       }
     }
 
-    const embeddingRes = await embedWithRetry()
+    let embeddingRes: any
+    try {
+      embeddingRes = await embedWithRetry()
+    } catch (err: any) {
+      const status = err?.status || err?.statusCode
+      const message = err?.message || "Embedding call failed"
+      console.error("/api/search/semantic embedding final failure", message)
+      if (status === 500 || status === 502 || status === 503 || status === 504) {
+        return NextResponse.json(
+          { error: "Semantic search is temporarily unavailable. Please try again shortly." },
+          { status: 503 }
+        )
+      }
+      throw err
+    }
     const vec = (embeddingRes as any)?.embedding?.values as number[] | undefined
     if (!vec || !Array.isArray(vec)) {
       console.warn("/api/search/semantic embedding returned empty vector", embeddingRes)
